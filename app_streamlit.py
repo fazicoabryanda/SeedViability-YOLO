@@ -1,5 +1,5 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image, UnidentifiedImageError # Added UnidentifiedImageError
 import cv2
 from ultralytics import YOLO
 import os
@@ -7,11 +7,9 @@ import sys
 from werkzeug.utils import secure_filename
 from streamlit_option_menu import option_menu
 import numpy as np
-import pandas as pd # Added for DataFrame
-import streamlit as st
-from PIL import Image
-import base64
-from io import BytesIO
+import pandas as pd
+from io import BytesIO 
+import base64        
 
 
 # --- (OPSIONAL TAPI DIREKOMENDASIKAN) Fungsi Helper Path untuk Bundling Nanti ---
@@ -23,7 +21,7 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 # --- Konfigurasi Aplikasi ---
-st.set_page_config(layout="wide", page_title="Seed Analysis Suite", page_icon="🌾")
+st.set_page_config(layout="wide", page_title="Seed Analysis Suite", page_icon="icon.ico")
 
 # --- Model Configuration ---
 COUNTING_MODEL_FILENAME = 'counting_model.pt'
@@ -53,6 +51,7 @@ def load_yolo_model(path_ke_model):
         st.error(f"Error loading YOLO model from '{path_ke_model}': {e}")
         return None
 
+
 # --- Side Bar Menu ---
 with st.sidebar:
     selected_page = option_menu(
@@ -71,7 +70,7 @@ if selected_page == "Home":
     st.markdown("<br><br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([3, 0.5, 3])
     with col1:
-        st.markdown("<br><br><br>", unsafe_allow_html=True)
+        st.markdown("<br><br><br><br><br><br><br><br><br><br><br><br>", unsafe_allow_html=True)
         st.header("Next-Generation Seed Insights: Powered by Advanced AI")
         st.markdown("""
         <div style='text-align: justify; line-height: 1.6;'>
@@ -202,9 +201,11 @@ elif selected_page == "Seed Testing":
                                 # Draw bounding box on visualization image
                                 cv2.rectangle(output_image_counting_viz, (x1, y1), (x2, y2), (0, 0, 255), 2) # Red Bbox as fallback
 
+                            # This is the line that might be incorrect in your current code
+                            # Ensure it looks like this:
                             predictions_data.append({
                                 'No.': seed_id,
-                                'Thumbnail': thumbnail_pil if thumbnail_pil else Image.new('RGB', (32,32), color='gray'), # Placeholder if no thumbnail
+                                'Thumbnail': thumbnail_pil if thumbnail_pil else Image.new('RGB', (32,32), color='gray'), # CORRECT
                                 'BBox (x1,y1,x2,y2)': bbox_str,
                                 'Mean R': round(mean_r, 2),
                                 'Mean G': round(mean_g, 2),
@@ -484,77 +485,80 @@ elif selected_page == "Seed Testing":
 
 
 elif selected_page == "Contact":
-        # --- PATH ASET ---
-        # Pastikan gambar 'fazico.jpg' ada di direktori yang sama dengan script Python Anda
-        # atau berikan path absolut/relatif yang benar.
-        # Load and display profile picture
-        # Load profile picture
-        profile_pic = Image.open("kirito.jpg")  # Ganti dengan nama file foto kamu
-
-        # Convert to base64
+        # Fungsi untuk konversi gambar ke base64
         def get_base64(img):
             buffer = BytesIO()
             img.save(buffer, format="PNG")
             return base64.b64encode(buffer.getvalue()).decode()
 
-        img_base64 = get_base64(profile_pic)
+        # Load foto profil
+        fazico_img = Image.open("kirito.jpg")  # Ganti sesuai filemu
+        mira_img = Image.open("Mira-Widiastuti-2.png")      # Ganti sesuai file Mira
 
-        # Display circular image using HTML
-        st.markdown(
-            f"""
-            <div style="display: flex; justify-content: center;">
-                <img src="data:image/png;base64,{img_base64}"
-                     alt="Profile Picture"
-                     style="width: 180px; height: 180px; border-radius: 50%; object-fit: cover; box-shadow: 0px 4px 10px rgba(0,0,0,0.1);">
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        fazico_base64 = get_base64(fazico_img)
+        mira_base64 = get_base64(mira_img)
 
+        # Layout 2 kolom
+        col1, col2 = st.columns(2)
 
-        # Introduction
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        st.markdown("""
-        Hello! I'm **Fazico Rakcel Abryanda**, an undergraduate student majoring in **Agricultural and Biosystems Engineering** at **Universitas Brawijaya**, 2021.
+        # -------------------- FAZICO --------------------
+        with col1:
+            st.markdown(
+                f"""
+                <div style="display: flex; justify-content: center;">
+                    <img src="data:image/png;base64,{fazico_base64}"
+                        alt="Fazico"
+                        style="width: 180px; height: 180px; border-radius: 50%; object-fit: cover; box-shadow: 0px 4px 10px rgba(0,0,0,0.1);">
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-        I am passionate about artificial intelligence, agriculture, technology, data science, and computer vision. 
-        If you would like to collaborate, ask questions, or just connect — feel free to reach out to us using the contact information below.
-        """)
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("""
+            ### Fazico Rakcel Abryanda
+            🎓 Undergraduate Student  
+            **Agricultural and Biosystems Engineering**  
+            **Brawijaya University, Class of 2021**
 
-        st.divider()
+            Passionate about artificial intelligence, agriculture, technology, data science, and computer vision. Let's connect!
 
-        # Contact Info
-        st.subheader("📬 Contact Information")
-        st.markdown("""
-        - **📧 Email:** [fazicochiko@gmail.com](mailto:fazicochiko@gmail.com)  
-        - **📱 WhatsApp:** [0895-2604-3044](https://wa.me/6289526043044)  
-        - **💼 LinkedIn:** [Fazico Rakcel Abryanda](https://www.linkedin.com/in/fazico-rakcel-abryanda-130970233)  
-        - **💻 GitHub:** [github.com/fazicoabryanda](https://github.com/fazicoabryanda)
-        """)
+            **📧 Email:** [fazicochiko@gmail.com](mailto:fazicochiko@gmail.com)  
+            **📱 WhatsApp:** [0895-2604-3044](https://wa.me/6289526043044)  
+            **💼 LinkedIn:** [Fazico Rakcel Abryanda](https://www.linkedin.com/in/fazico-rakcel-abryanda-130970233)  
+            **💻 GitHub:** [fazicoabryanda](https://github.com/fazicoabryanda)
+            """)
 
-        st.divider()
+        # -------------------- MIRA --------------------
+        with col2:
+            st.markdown(
+                f"""
+                <div style="display: flex; justify-content: center;">
+                    <img src="data:image/png;base64,{mira_base64}"
+                        alt="Mira"
+                        style="width: 180px; height: 180px; border-radius: 50%; object-fit: cover; box-shadow: 0px 4px 10px rgba(0,0,0,0.1);">
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("""
+            ### Mira Landep Widiastuti  
+            🧪 Researcher – Seed Science and Technology  
+            **National Research and Innovation Agency (BRIN)**
+
+            Mira specializes in rice seed physiology, seed processing technology, and digital image analysis for seed classification. She has contributed to many scientific papers in seed quality improvement.
+
+            **📧 Email:** N/A  
+            **📚 Google Scholar:** [Mira Widiastuti](https://scholar.google.co.id/citations?user=MB4ADTMAAAAJ)  
+            **📖 ResearchGate:** [Mira Widiastuti](https://www.researchgate.net/profile/Mira_Widiastuti)  
+            **💼 LinkedIn:** [Mira L. Widiastuti](https://id.linkedin.com/in/mira-l-widiastuti-52400a42)
+            """)
 
         # Footer
-        st.caption("© 2025 Fazico Rakcel Abryanda – Agricultural and Biosystems Engineering Student, Universitas Brawijaya")
-
-        # Optional styling
-        st.markdown("""
-        <style>
-            .main {
-                background-color: #fafafa;
-                font-family: 'Segoe UI', sans-serif;
-            }
-            a {
-                color: #0072B1;
-                text-decoration: none;
-            }
-            img {
-                border-radius: 50%;
-                margin-top: 10px;
-                box-shadow: 0px 2px 10px rgba(0, 0, 0, 0.1);
-            }
-        </style>
-        """, unsafe_allow_html=True)
+        st.divider()
+        st.caption("©2025")
 
 
 st.sidebar.markdown("---")
