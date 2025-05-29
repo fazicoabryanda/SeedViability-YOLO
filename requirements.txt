@@ -1,5 +1,8 @@
 streamlit
 opencv-python-headless
 ultralytics
+pandas
 Pillow
+numpy
 werkzeug
+streamlit-option-menu
