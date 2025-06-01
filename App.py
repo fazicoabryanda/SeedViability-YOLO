@@ -548,7 +548,16 @@ elif selected_page == "Seed Testing":
 
             with st.spinner("Analyzing image viability, please wait..."):
                 try:
-                    results_viability = model_viability(temp_filepath_viability, device='cpu', imgsz=640)
+                    
+                    confidence_threshold_viability = 0.25 # Sesuaikan nilai ini
+                    iou_threshold_viability = 0.3  
+                    
+                    results_viability = model_viability(            
+                        temp_filepath_viability, 
+                        device='cpu', 
+                        imgsz=640,
+                        conf=confidence_threshold_viability, # Tambahkan/sesuaikan
+                        iou=iou_threshold_viability  )
 
                     img_cv_viability = cv2.imread(temp_filepath_viability)
                     if img_cv_viability is None:
