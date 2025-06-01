@@ -160,9 +160,6 @@ with st.sidebar:
         help="Jika dicentang, NMS akan menekan kotak tumpang tindih tanpa mempedulikan kelasnya."
     )
     st.sidebar.markdown("---")
-    st.sidebar.info("Seed Analysis Suite v1.0") # Informasi versi dipindahkan ke sini
-
-
 
 
 if selected_page == "Home":
