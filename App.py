@@ -136,8 +136,7 @@ with st.sidebar:
     st.sidebar.markdown("---") # Pemisah
 
     # --- TAMBAHKAN SLIDER NMS DI SINI (AKAN SELALU MUNCUL DI SIDEBAR) ---
-    st.sidebar.subheader("⚙️ NMS Tuning (Global)")
-    st.sidebar.caption("Pengaturan ini berlaku untuk semua tes (Counting, Viability, Purity). Sesuaikan untuk mengurangi tumpang tindih atau memperbaiki deteksi.")
+    st.sidebar.subheader("NMS Tuning (Global)")
     
     # Tentukan nilai default awal berdasarkan eksperimen Anda sebelumnya
     # Misalnya, nilai yang mendeteksi semua objek tapi masih ada sedikit tumpang tindih
