@@ -133,6 +133,39 @@ with st.sidebar:
 
 # --- Konten Halaman Berdasarkan Pilihan Sidebar ---
 
+    st.sidebar.markdown("---") # Pemisah
+
+    # --- TAMBAHKAN SLIDER NMS DI SINI (AKAN SELALU MUNCUL DI SIDEBAR) ---
+    st.sidebar.subheader("⚙️ NMS Tuning (Global)")
+    st.sidebar.caption("Pengaturan ini berlaku untuk semua tes (Counting, Viability, Purity). Sesuaikan untuk mengurangi tumpang tindih atau memperbaiki deteksi.")
+    
+    # Tentukan nilai default awal berdasarkan eksperimen Anda sebelumnya
+    # Misalnya, nilai yang mendeteksi semua objek tapi masih ada sedikit tumpang tindih
+    conf_threshold_slider = st.sidebar.slider(
+        "Confidence Threshold (conf)", 
+        min_value=0.01, max_value=0.99, # Batasi max agar tidak 1.0
+        value=0.25, # Nilai awal yang baik untuk dicoba
+        step=0.01,
+        help="Deteksi dengan skor di bawah ini akan diabaikan. Naikkan untuk mengurangi deteksi (termasuk yang salah/lemah), turunkan untuk lebih banyak deteksi."
+    )
+    iou_threshold_slider = st.sidebar.slider(
+        "IoU Threshold (iou) for NMS", 
+        min_value=0.01, max_value=0.99, # Batasi max agar tidak 1.0
+        value=0.35, # Nilai awal yang baik (turunkan untuk lebih agresif mengurangi tumpang tindih)
+        step=0.01,
+        help="Maksimum tumpang tindih (IoU) yang diizinkan antar deteksi. Turunkan untuk lebih agresif menekan kotak yang tumpang tindih."
+    )
+    agnostic_nms_checkbox = st.sidebar.checkbox(
+        "Agnostic NMS", 
+        value=False, # Coba juga dengan True
+        help="Jika dicentang, NMS akan menekan kotak tumpang tindih tanpa mempedulikan kelasnya."
+    )
+    st.sidebar.markdown("---")
+    st.sidebar.info("Seed Analysis Suite v1.0") # Informasi versi dipindahkan ke sini
+
+
+
+
 if selected_page == "Home":
     # ... (Home page content remains the same) ...
 
