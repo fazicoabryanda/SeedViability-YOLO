@@ -1,8 +1,12 @@
 streamlit
-opencv-python-headless
-ultralytics
-pandas
 Pillow
-numpy
-werkzeug
+opencv-python
+ultralytics
+Werkzeug
 streamlit-option-menu
+numpy
+pandas
+scikit-image
+matplotlib
+seaborn
+scikit-learn
