@@ -550,7 +550,7 @@ elif selected_page == "Seed Testing":
                 try:
                     
                     current_conf_threshold = 0.25  # Coba naikkan ini (misal: 0.3, 0.4, 0.5)
-                    current_iou_threshold = 0.35   # Coba turunkan ini (misal: 0.2, 0.15, 0.1)
+                    current_iou_threshold = 0.3   # Coba turunkan ini (misal: 0.2, 0.15, 0.1)
                     use_agnostic_nms = False   
                     
                     results_viability = model_viability(            
