@@ -549,15 +549,17 @@ elif selected_page == "Seed Testing":
             with st.spinner("Analyzing image viability, please wait..."):
                 try:
                     
-                    confidence_threshold_viability = 0.25 # Sesuaikan nilai ini
-                    iou_threshold_viability = 0.3  
+                    current_conf_threshold = 0.3  # Coba naikkan ini (misal: 0.3, 0.4, 0.5)
+                    current_iou_threshold = 0.2   # Coba turunkan ini (misal: 0.2, 0.15, 0.1)
+                    use_agnostic_nms = True   
                     
                     results_viability = model_viability(            
                         temp_filepath_viability, 
                         device='cpu', 
                         imgsz=640,
-                        conf=confidence_threshold_viability, # Tambahkan/sesuaikan
-                        iou=iou_threshold_viability  )
+                        conf=current_conf_threshold, # Tambahkan/sesuaikan
+                        iou=current_iou_threshold,
+                        agnostic_nms=use_agnostic_nms)
 
                     img_cv_viability = cv2.imread(temp_filepath_viability)
                     if img_cv_viability is None:
