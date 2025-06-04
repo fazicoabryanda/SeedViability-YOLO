@@ -1,6 +1,9 @@
-*.pt binary
 *.pth binary
 *.weights binary
 *.onnx binary
 *.pb binary
 *.tflite binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
