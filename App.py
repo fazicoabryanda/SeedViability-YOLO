@@ -31,11 +31,13 @@ st.set_page_config(layout="wide", page_title="Seed Analysis Suite", page_icon="i
 COUNTING_MODEL_FILENAME = 'counting_model2.pt'
 VIABILITY_MODEL_FILENAME = 'viability_model2.pt'
 PURITY_MODEL_FILENAME = 'purity_model.pt'
+TETRAZOLIUM_MODEL_FILENAME = 'tetrazolium_model.pt' 
 
 # Jika model ada di direktori yang sama dengan script:
 COUNTING_MODEL_PATH = COUNTING_MODEL_FILENAME
 VIABILITY_MODEL_PATH = VIABILITY_MODEL_FILENAME
 PURITY_MODEL_PATH = PURITY_MODEL_FILENAME
+TETRAZOLIUM_MODEL_PATH = TETRAZOLIUM_MODEL_FILENAME
 
 # # Jika model ada di subdirektori 'models' (misalnya, untuk PyInstaller)
 # # Pastikan Anda membuat direktori 'models' dan menempatkan file .pt di dalamnya
@@ -162,7 +164,7 @@ with st.sidebar:
         key="agnostic_checkbox_global"
     )
     st.sidebar.markdown("---")
-    st.sidebar.info("Seed Analysis Suite v1")
+
 
 
 # --- Konten Halaman Berdasarkan Pilihan Sidebar ---
@@ -218,8 +220,8 @@ elif selected_page == "Seed Testing":
     with st.sidebar: # Sub-menu for seed testing options
         selected_test_type = option_menu(
             menu_title="Seed Testing Options",
-            options=["Counting", "Viability Test", "Purity Test"],
-            icons=['123', 'heart-pulse', 'filter-circle'],
+            options=["Counting", "Viability Test", "Purity Test","Tetrazolium Test"],
+            icons=['123', 'heart-pulse', 'filter-circle',  'droplet-half'],
             menu_icon="seedling", # Bootstrap icon for seedling
             default_index=0,
             key="seed_testing_submenu" # Unique key for this menu
@@ -759,6 +761,168 @@ elif selected_page == "Seed Testing":
             st.warning("Cannot process image because the purity model is not loaded.")
 
 
+# Di dalam blok `elif selected_page == "Seed Testing":`
+# Setelah blok `elif selected_test_type == "Purity Test":`
+
+    # ... (kode untuk Counting, Viability, Purity tetap sama) ...
+
+    elif selected_test_type == "Tetrazolium Test":
+        st.title("🧪 Tetrazolium Test (TZ) - Viability Classification")
+        st.markdown("""
+        Unggah gambar benih (atau sampel yang sudah disiapkan) setelah pewarnaan Tetrazolium. 
+        Model akan mengklasifikasikan viabilitasnya berdasarkan keseluruhan gambar.
+        Pengaturan 'Confidence Threshold' dari sidebar dapat digunakan sebagai ambang batas minimum 
+        untuk menerima hasil klasifikasi. Pengaturan 'IoU Threshold' dan 'Agnostic NMS' 
+        tidak berlaku untuk tugas klasifikasi gambar ini.
+        """)
+        
+        # --- Load Model Klasifikasi Tetrazolium ---
+        # Pastikan TETRAZOLIUM_MODEL_PATH sudah didefinisikan dengan benar
+        model_tetrazolium_cls = load_yolo_model(TETRAZOLIUM_MODEL_PATH) 
+        
+        if model_tetrazolium_cls is None:
+            st.error(f"Model klasifikasi Tetrazolium ('{os.path.basename(TETRAZOLIUM_MODEL_PATH)}') tidak dapat dimuat. Pastikan file model ada dan path sudah benar.")
+            st.stop() # Hentikan eksekusi halaman ini jika model tidak ada
+
+        uploaded_file_tz_cls = st.file_uploader("Pilih gambar hasil uji Tetrazolium untuk klasifikasi...", type=["png", "jpg", "jpeg"], key="tz_cls_uploader")
+
+        if uploaded_file_tz_cls is not None:
+            filename_tz_cls = secure_filename(uploaded_file_tz_cls.name)
+            # Buat path file sementara di dalam UPLOAD_DIR
+            if not os.path.exists(UPLOAD_DIR):
+                os.makedirs(UPLOAD_DIR)
+            temp_filepath_tz_cls = os.path.join(UPLOAD_DIR, f"tz_cls_{filename_tz_cls}")
+
+            # Simpan file yang diunggah untuk diproses model
+            try:
+                with open(temp_filepath_tz_cls, "wb") as f:
+                    f.write(uploaded_file_tz_cls.getbuffer())
+            except Exception as e:
+                st.error(f"Gagal menyimpan file yang diunggah: {e}")
+                st.stop()
+
+            st.markdown("---")
+            st.subheader("Gambar untuk Diklasifikasi:")
+            
+            col_img_display_tz, col_result_display_tz = st.columns([2, 3])
+
+            with col_img_display_tz:
+                try:
+                    image_to_display = Image.open(temp_filepath_tz_cls)
+                    st.image(image_to_display, caption="Uploaded Tetrazolium Image", use_container_width=True)
+                except UnidentifiedImageError:
+                    st.error("Tidak dapat mengidentifikasi file gambar. Mungkin rusak atau bukan format gambar yang valid.")
+                    st.stop()
+                except Exception as e:
+                    st.error(f"Gagal menampilkan gambar TZ: {e}")
+                    st.stop()
+
+            # Tombol untuk memicu klasifikasi
+            if st.button("Classify TZ Viability", key="classify_tz_button_main_page", type="primary", use_container_width=True):
+                with col_result_display_tz:
+                    with st.spinner("Mengklasifikasikan gambar..."):
+                        try:
+                            # Panggil model klasifikasi Ultralytics
+                            results_tz_classification_list = model_tetrazolium_cls(
+                                temp_filepath_tz_cls,
+                                conf=conf_threshold_slider 
+                            ) 
+
+                            if results_tz_classification_list:
+                                result = results_tz_classification_list[0] 
+                                
+                                # --- PERBAIKAN AKSES ATRIBUT ---
+                                # Akses top1 dan top1conf dari objek result.probs
+                                if hasattr(result, 'probs') and result.probs is not None and \
+                                   hasattr(result.probs, 'top1') and result.probs.top1 is not None and \
+                                   hasattr(result.probs, 'top1conf') and result.probs.top1conf is not None and \
+                                   hasattr(result, 'names') and result.names is not None:
+                                    
+                                    predicted_class_index = result.probs.top1 # Ambil dari result.probs
+                                    predicted_confidence = float(result.probs.top1conf) # Ambil dari result.probs
+                                    
+                                    class_names_from_model = result.names # result.names adalah dictionary
+                                    if isinstance(class_names_from_model, dict):
+                                        predicted_class_name = class_names_from_model.get(predicted_class_index, f"Unknown Class ID: {predicted_class_index}")
+                                    else:
+                                        st.warning("Format `result.names` tidak terduga (bukan dictionary). Menggunakan ID kelas.")
+                                        predicted_class_name = f"Class ID: {predicted_class_index}"
+                                    # --- AKHIR PERBAIKAN AKSES ATRIBUT ---
+
+                                    st.markdown("---")
+                                    st.markdown("#### Hasil Klasifikasi:")
+
+                                    if predicted_confidence >= conf_threshold_slider:
+                                        if "viable" in predicted_class_name.lower():
+                                            st.success(f"**Kelas Prediksi: {predicted_class_name}**")
+                                    
+                                        elif "nonviable" in predicted_class_name.lower() or "non-viable" in predicted_class_name.lower():
+                                            st.error(f"**Kelas Prediksi: {predicted_class_name}**")
+                                        else: 
+                                            st.info(f"**Kelas Prediksi: {predicted_class_name}** (Periksa nama kelas di model)")
+                                        
+                                        st.metric(label="Skor Kepercayaan", value=f"{predicted_confidence:.2%}")
+                                    else:
+                                        st.warning(f"Skor kepercayaan klasifikasi ({predicted_confidence:.2%}) di bawah ambang batas ({conf_threshold_slider:.2%}). Hasil prediksi mentah: '{predicted_class_name}'.")
+
+                                    st.markdown("---")
+                                    st.markdown("##### Probabilitas Detail per Kelas:")
+                                    
+                                    try:
+                                        # result.probs.data adalah tensor probabilitas
+                                        probs_tensor = result.probs.data 
+                                        if hasattr(probs_tensor, 'cpu'): 
+                                            probs_data_list = probs_tensor.cpu().numpy().tolist()
+                                        else: 
+                                            probs_data_list = probs_tensor.tolist()
+
+                                        if isinstance(class_names_from_model, dict):
+                                            class_names_for_df = [class_names_from_model.get(i, f"ID_{i}") for i in range(len(probs_data_list))]
+                                        else:
+                                            class_names_for_df = [f"Class_ID_{i}" for i in range(len(probs_data_list))]
+                                            # Peringatan sudah diberikan di atas jika result.names bukan dict
+
+                                        probs_df = pd.DataFrame({
+                                            "Nama Kelas": class_names_for_df,
+                                            "Probabilitas": [f"{p:.2%}" for p in probs_data_list]
+                                        })
+                                        st.dataframe(probs_df.sort_values(by="Probabilitas", ascending=False), use_container_width=True, hide_index=True)
+                                    except Exception as e_probs:
+                                        st.warning(f"Tidak dapat menampilkan probabilitas detail: {e_probs}")
+                                        # st.write("Objek probs mentah:", result.probs)
+
+                                else:
+                                    st.warning("Format output model klasifikasi tidak sesuai harapan atau atribut penting (probs, names, top1, top1conf) tidak ditemukan/None.")
+                                    st.markdown("---")
+                                    st.markdown("##### Output Mentah Model (untuk Debugging):")
+                                    st.text(f"Tipe objek result: {type(result)}")
+                                    st.text(f"Representasi string result:\n{str(result)}")
+                                    st.write("Atribut objek result:", dir(result)) 
+                                    if hasattr(result, 'probs'):
+                                        st.text(f"Tipe objek result.probs: {type(result.probs)}")
+                                        st.text(f"Representasi string result.probs:\n{str(result.probs)}")
+                                        st.write("Atribut objek result.probs:", dir(result.probs))
+
+
+                            else:
+                                st.error("Model tidak mengembalikan hasil apapun untuk klasifikasi.")
+                        
+                        except Exception as e:
+                            st.error(f"Terjadi error saat klasifikasi gambar Tetrazolium: {e}")
+                            import traceback
+                            st.error(f"Traceback Lengkap: {traceback.format_exc()}")
+            
+            # (Opsional) Hapus file sementara setelah selesai
+            # try:
+            #     if os.path.exists(temp_filepath_tz_cls):
+            #         os.remove(temp_filepath_tz_cls)
+            # except Exception as e_remove:
+            #     st.warning(f"Tidak dapat menghapus file sementara {temp_filepath_tz_cls}: {e_remove}")
+
+        elif uploaded_file_tz_cls is None:
+            st.info("Silakan unggah gambar hasil uji Tetrazolium untuk memulai klasifikasi.")
+
+
 elif selected_page == "Contact":
     st.title("📞 Contact Us")
     # Fungsi untuk konversi gambar ke base64
@@ -780,16 +944,13 @@ elif selected_page == "Contact":
     # Layout 2 kolom
     col1_contact, col2_contact = st.columns(2)
 
-    with col1_contact:
+# Di dalam blok `elif selected_page == "Contact":`
+
+    # ... (fungsi get_base64 dan pemuatan foto profil tetap sama) ...
+
+    with col1_contact: # Fazico
         if fazico_base64:
-            st.markdown(
-                f"""
-                <div style="display: flex; justify-content: center;">
-                    <img src="data:image/png;base64,{fazico_base64}"
-                         alt="Fazico"
-                         style="width: 180px; height: 180px; border-radius: 50%; object-fit: cover; box-shadow: 0px 4px 10px rgba(0,0,0,0.1);">
-                </div>
-                """, unsafe_allow_html=True)
+            st.markdown(f"""<div style="display: flex; justify-content: center;"><img src="data:image/png;base64,{fazico_base64}" alt="Fazico" style="width: 180px; height: 180px; border-radius: 50%; object-fit: cover; box-shadow: 0px 4px 10px rgba(0,0,0,0.1);"></div>""", unsafe_allow_html=True)
         else:
             st.markdown("<p style='text-align:center;'>Fazico's Photo Not Found</p>", unsafe_allow_html=True)
 
@@ -804,22 +965,18 @@ elif selected_page == "Contact":
         Passionate about leveraging technology to enhance agricultural productivity and sustainability.
 
         ---
-        **📧 Email:** [fazicochiko@gmail.com](mailto:fazicochiko@gmail.com)
-        **📱 WhatsApp:** [+62 895-2604-3044](https://wa.me/6289526043044)
-        **<img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linkedin/linkedin-original.svg" width="16"/> LinkedIn:** [Fazico Rakcel Abryanda](https://www.linkedin.com/in/fazico-rakcel-abryanda-130970233)
-        **<img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/github/github-original.svg" width="16"/> GitHub:** [fazicoabryanda](https://github.com/fazicoabryanda)
-        """)
+        """, unsafe_allow_html=True) # Pisahkan markdown teks dari HTML ikon
 
-    with col2_contact:
+        # --- PERBAIKAN UNTUK IKON FAZICO ---
+        st.markdown(f"""
+        <p>📧 Email: <a href="mailto:fazicochiko@gmail.com">fazicochiko@gmail.com</a></p>
+        <p><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linkedin/linkedin-original.svg" width="16" height="16" style="vertical-align:middle; margin-right:5px;"> LinkedIn: <a href="https://www.linkedin.com/in/fazico-rakcel-abryanda-130970233" target="_blank">Fazico Rakcel Abryanda</a></p>
+        <p><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/github/github-original.svg" width="16" height="16" style="vertical-align:middle; margin-right:5px;"> GitHub: <a href="https://github.com/fazicoabryanda" target="_blank">fazicoabryanda</a></p>
+        """, unsafe_allow_html=True)
+
+    with col2_contact: # Mira
         if mira_base64:
-            st.markdown(
-                f"""
-                <div style="display: flex; justify-content: center;">
-                    <img src="data:image/png;base64,{mira_base64}"
-                         alt="Mira"
-                         style="width: 180px; height: 180px; border-radius: 50%; object-fit: cover; box-shadow: 0px 4px 10px rgba(0,0,0,0.1);">
-                </div>
-                """, unsafe_allow_html=True)
+            st.markdown(f"""<div style="display: flex; justify-content: center;"><img src="data:image/png;base64,{mira_base64}" alt="Mira" style="width: 180px; height: 180px; border-radius: 50%; object-fit: cover; box-shadow: 0px 4px 10px rgba(0,0,0,0.1);"></div>""", unsafe_allow_html=True)
         else:
             st.markdown("<p style='text-align:center;'>Mira's Photo Not Found</p>", unsafe_allow_html=True)
 
@@ -833,12 +990,24 @@ elif selected_page == "Contact":
         Expertise in seed quality assessment and innovative agricultural practices.
 
         ---
-        **📧 Email:** (Not Publicly Available)
-        **<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-google" viewBox="0 0 16 16"><path d="M15.545 6.558a9.42 9.42 0 0 1 .139 1.626c0 2.434-.87 4.492-2.384 5.885h.002C11.978 15.292 10.158 16 8 16A8 8 0 1 1 8 0a7.689 7.689 0 0 1 5.352 2.082l-2.284 2.284A4.347 4.347 0 0 0 8 3.166c-2.087 0-3.86 1.408-4.492 3.304a4.792 4.792 0 0 0 0 3.063h.003c.635 1.893 2.405 3.301 4.492 3.301 1.078 0 2.004-.276 2.722-.764h-.003a3.702 3.702 0 0 0 1.599-2.431H8v-3.08h7.545z"/></svg> Google Scholar:** [Mira Widiastuti](https://scholar.google.co.id/citations?user=MB4ADTMAAAAJ)
-        **<img src="https://www.researchgate.net/images/favicon.png" width="16"/> ResearchGate:** [Mira Widiastuti](https://www.researchgate.net/profile/Mira_Widiastuti)
-        **<img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linkedin/linkedin-original.svg" width="16"/> LinkedIn:** [Mira L. Widiastuti](https://id.linkedin.com/in/mira-l-widiastuti-52400a42)
-        """)
+        """, unsafe_allow_html=True) # Pisahkan markdown teks dari HTML ikon
+
+        # --- PERBAIKAN UNTUK IKON MIRA ---
+        # Untuk Google Scholar, kita bisa gunakan emoji atau tag <img> jika ada URL ikon yang bagus.
+        # Tag <svg> langsung di markdown bisa tricky.
+        # Saya akan menggunakan emoji untuk Google Scholar sebagai contoh, dan <img> untuk yang lain.
+        
+        # URL ikon Google Scholar yang lebih stabil (jika ada, atau gunakan emoji)
+        google_scholar_icon_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Google_Scholar_logo.svg/1024px-Google_Scholar_logo.svg.png" # Contoh URL ikon
+        
+        st.markdown(f"""
+        <p>📧 Email: (Not Publicly Available)</p>
+        <p><img src="{google_scholar_icon_url}" width="16" height="16" style="vertical-align:middle; margin-right:5px;"> Google Scholar: <a href="https://scholar.google.co.id/citations?user=MB4ADTMAAAAJ" target="_blank">Mira Widiastuti</a></p>
+        <p><img src="https://www.researchgate.net/images/favicon.png" width="16" height="16" style="vertical-align:middle; margin-right:5px;"> ResearchGate: <a href="https://www.researchgate.net/profile/Mira_Widiastuti" target="_blank">Mira Widiastuti</a></p>
+        <p><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linkedin/linkedin-original.svg" width="16" height="16" style="vertical-align:middle; margin-right:5px;"> LinkedIn: <a href="https://id.linkedin.com/in/mira-l-widiastuti-52400a42" target="_blank">Mira L. Widiastuti</a></p>
+        """, unsafe_allow_html=True)
 
     # Footer
+    st.sidebar.info("Seed Analysis Suite v1")
     st.divider()
     st.caption("Seed Analysis Suite ©2025")
