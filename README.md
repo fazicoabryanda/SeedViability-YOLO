@@ -4,8 +4,8 @@
 
 The **Seed Analysis Suite** is a comprehensive web application built with Streamlit for advanced seed analysis. It leverages deep learning (YOLO models) and sophisticated image processing techniques to provide precise assessments of seed count, viability, and purity. The application aims to offer a technological edge for superior crop performance and yield optimization.
 
-**Version:** 1.0 (as indicated in the app)
-**Year:** 2025 (as indicated in the app footer)
+**Version:** 1.0
+**Year:** 2025 
 
 ---
 
