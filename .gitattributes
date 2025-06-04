@@ -1,0 +1,6 @@
+*.pt binary
+*.pth binary
+*.weights binary
+*.onnx binary
+*.pb binary
+*.tflite binary
