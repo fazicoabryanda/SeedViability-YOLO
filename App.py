@@ -31,7 +31,7 @@ st.set_page_config(layout="wide", page_title="Seed Analysis Suite", page_icon="i
 COUNTING_MODEL_FILENAME = 'counting_model2.pt'
 VIABILITY_MODEL_FILENAME = 'viability_model2.pt'
 PURITY_MODEL_FILENAME = 'purity_model.pt'
-TETRAZOLIUM_MODEL_FILENAME = 'tetrazolium_model.pt' 
+TETRAZOLIUM_MODEL_FILENAME = 'tz_model.pt' 
 
 # Jika model ada di direktori yang sama dengan script:
 COUNTING_MODEL_PATH = COUNTING_MODEL_FILENAME
