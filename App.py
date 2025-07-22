@@ -24,6 +24,20 @@ def resource_path(relative_path):
         base_path = os.path.abspath(os.path.dirname(__file__))
     return os.path.join(base_path, relative_path)
 
+# --- FUNGSI BARU UNTUK KONVERSI GAMBAR KE BASE64 UNTUK DATAFRAME ---
+def pil_to_base64(image, format="PNG"):
+    """Konversi objek PIL.Image ke string Base64 untuk disematkan di HTML/Markdown."""
+    if image is None:
+        return None
+    buffered = BytesIO()
+    # Pastikan gambar dalam mode RGB untuk menghindari masalah dengan palet
+    if image.mode in ("RGBA", "P"): 
+        image = image.convert("RGB")
+    image.save(buffered, format=format)
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+    return f"data:image/{format.lower()};base64,{img_str}"
+
+
 # --- Konfigurasi Aplikasi ---
 st.set_page_config(layout="wide", page_title="Seed Analysis Suite", page_icon="icon.ico")
 
@@ -31,21 +45,13 @@ st.set_page_config(layout="wide", page_title="Seed Analysis Suite", page_icon="i
 COUNTING_MODEL_FILENAME = 'counting_model2.pt'
 VIABILITY_MODEL_FILENAME = 'viability_model2.pt'
 PURITY_MODEL_FILENAME = 'purity_model.pt'
-TETRAZOLIUM_MODEL_FILENAME = 'tz_model.pt' 
+TETRAZOLIUM_MODEL_FILENAME = 'tetrazolium_model.pt' 
 
 # Jika model ada di direktori yang sama dengan script:
 COUNTING_MODEL_PATH = COUNTING_MODEL_FILENAME
 VIABILITY_MODEL_PATH = VIABILITY_MODEL_FILENAME
 PURITY_MODEL_PATH = PURITY_MODEL_FILENAME
 TETRAZOLIUM_MODEL_PATH = TETRAZOLIUM_MODEL_FILENAME
-
-# # Jika model ada di subdirektori 'models' (misalnya, untuk PyInstaller)
-# # Pastikan Anda membuat direktori 'models' dan menempatkan file .pt di dalamnya
-# # atau sesuaikan path ini jika Anda menggunakan resource_path untuk bundling.
-# # COUNTING_MODEL_PATH = resource_path(os.path.join('models', COUNTING_MODEL_FILENAME))
-# # VIABILITY_MODEL_PATH = resource_path(os.path.join('models', VIABILITY_MODEL_FILENAME))
-# # PURITY_MODEL_PATH = resource_path(os.path.join('models', PURITY_MODEL_FILENAME))
-
 
 UPLOAD_DIR = "streamlit_uploads"
 if not os.path.exists(UPLOAD_DIR):
@@ -59,8 +65,6 @@ def load_yolo_model(path_ke_model):
             st.error(f"Model file not found at: {path_ke_model}")
             return None
         model = YOLO(path_ke_model)
-        # Minimal success message, or remove if too verbose during use
-        # st.sidebar.success(f"Model '{os.path.basename(path_ke_model)}' ready.")
         return model
     except Exception as e:
         st.error(f"Error loading YOLO model from '{path_ke_model}': {e}")
@@ -72,7 +76,6 @@ GLCM_ANGLES_DEG_STR = ['0', '45', '90', '135']
 GLCM_ANGLES_RAD = [0, np.pi/4, np.pi/2, 3*np.pi/4]
 
 def get_default_glcm_features():
-    """Menghasilkan dictionary fitur GLCM default dengan nilai -1.0."""
     features = {}
     for prop in GLCM_PROPERTIES:
         for angle_str in GLCM_ANGLES_DEG_STR:
@@ -80,40 +83,26 @@ def get_default_glcm_features():
     return features
 
 def extract_glcm_features(gray_image_region):
-    """
-    Mengekstrak fitur GLCM untuk setiap sudut yang ditentukan.
-    """
     default_features = get_default_glcm_features()
-
     if gray_image_region is None or gray_image_region.size == 0 or gray_image_region.ndim != 2:
         return default_features
-
     if gray_image_region.dtype != np.uint8:
         if np.max(gray_image_region) <= 1.0 and np.min(gray_image_region) >=0:
             gray_image_region = (gray_image_region * 255).astype(np.uint8)
         else:
             gray_image_region = np.clip(gray_image_region, 0, 255).astype(np.uint8)
-
     if np.max(gray_image_region) == np.min(gray_image_region):
         custom_homogeneous_features = default_features.copy()
         for angle_str in GLCM_ANGLES_DEG_STR:
             custom_homogeneous_features[f"Contrast_{angle_str}"] = 0.0
             custom_homogeneous_features[f"Homogeneity_{angle_str}"] = 1.0
             if gray_image_region.size > 0:
-                custom_homogeneous_features[f"Energy_{angle_str}"] = 1.0 / (gray_image_region.size) if gray_image_region.size > 0 else 0.0
+                custom_homogeneous_features[f"Energy_{angle_str}"] = 1.0 / (gray_image_region.size)
             else:
                 custom_homogeneous_features[f"Energy_{angle_str}"] = 0.0
         return custom_homogeneous_features
-
-    distances = [1]
-
     try:
-        glcm_matrix = graycomatrix(gray_image_region,
-                                   distances=distances,
-                                   angles=GLCM_ANGLES_RAD,
-                                   levels=256,
-                                   symmetric=True,
-                                   normed=True)
+        glcm_matrix = graycomatrix(gray_image_region, distances=[1], angles=GLCM_ANGLES_RAD, levels=256, symmetric=True, normed=True)
         extracted_features = {}
         for prop_original_name in ['contrast', 'correlation', 'energy', 'homogeneity']:
             prop_values_for_angles = graycoprops(glcm_matrix, prop_original_name)[0]
@@ -123,7 +112,7 @@ def extract_glcm_features(gray_image_region):
                 value = prop_values_for_angles[i]
                 extracted_features[feature_key] = round(float(value), 4) if not np.isnan(value) else -1.0
         return extracted_features
-    except Exception as e:
+    except Exception:
         return default_features
 
 # --- Side Bar Menu ---
@@ -135,16 +124,12 @@ with st.sidebar:
         menu_icon="cast",
         default_index=0,
     )
-
-    st.sidebar.markdown("---") # Pemisah
-
-    # --- NMS TUNING SLIDERS (GLOBAL) ---
+    st.sidebar.markdown("---")
     st.sidebar.subheader("NMS Tuning (Global)")
-
     conf_threshold_slider = st.sidebar.slider(
         "Confidence Threshold (conf)",
         min_value=0.01, max_value=0.99,
-        value=0.25, # Nilai default
+        value=0.25,
         step=0.01,
         help="Deteksi dengan skor di bawah ini akan diabaikan. Naikkan untuk mengurangi deteksi (termasuk yang salah/lemah), turunkan untuk lebih banyak deteksi.",
         key="conf_slider_global"
@@ -152,23 +137,20 @@ with st.sidebar:
     iou_threshold_slider = st.sidebar.slider(
         "IoU Threshold (iou) for NMS",
         min_value=0.01, max_value=0.99,
-        value=0.45, # Nilai default (YOLOv8 default is 0.7, but lower can be better for overlapping objects)
+        value=0.45,
         step=0.01,
         help="Maksimum tumpang tindih (IoU) yang diizinkan antar deteksi. Turunkan untuk lebih agresif menekan kotak yang tumpang tindih.",
         key="iou_slider_global"
     )
     agnostic_nms_checkbox = st.sidebar.checkbox(
         "Agnostic NMS",
-        value=False, # Default
+        value=False,
         help="Jika dicentang, NMS akan menekan kotak tumpang tindih tanpa mempedulikan kelasnya.",
         key="agnostic_checkbox_global"
     )
     st.sidebar.markdown("---")
 
-
-
 # --- Konten Halaman Berdasarkan Pilihan Sidebar ---
-
 if selected_page == "Home":
     col_spacer_home, col_button_home = st.columns([0.85, 0.15])
     with col_button_home:
@@ -180,12 +162,11 @@ if selected_page == "Home":
 
     col1_home, col2_home = st.columns([1, 1])
     with col1_home:
-        # Cek apakah logo.png ada, jika tidak, jangan tampilkan atau tampilkan placeholder
         if os.path.exists("logo.png"):
             st.columns([1, 1])[0].image("logo.png", width=300)
         else:
             st.warning("logo.png tidak ditemukan.")
-        st.markdown("<br><br>" * 2 + "<br>" * 8, unsafe_allow_html=True) # Adjusted spacing
+        st.markdown("<br><br>" * 2 + "<br>" * 8, unsafe_allow_html=True)
         st.header("Next-Generation Seed Insights: Powered by Advanced AI")
         st.markdown("""
         <div style='text-align: justify; line-height: 1.6;'>
@@ -198,8 +179,6 @@ if selected_page == "Home":
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Explore Seed Testing →", type="primary", key="get_started_home"):
             st.info("Please select a test type from 'Seed Testing' in the sidebar menu, then upload an image.")
-            # Consider automatically switching the page or focusing the sidebar if desired,
-            # but for now, an info message is fine.
     with col2_home:
         st.markdown(
             """
@@ -208,23 +187,21 @@ if selected_page == "Home":
             </style>
             <div class="right-aligned-image">
             """, unsafe_allow_html=True)
-        # Cek apakah Aset1.png ada
         if os.path.exists("Aset1.png"):
             st.image("Aset1.png", width=600)
         else:
             st.warning("Aset1.png tidak ditemukan.")
         st.markdown("</div>", unsafe_allow_html=True)
 
-
 elif selected_page == "Seed Testing":
-    with st.sidebar: # Sub-menu for seed testing options
+    with st.sidebar:
         selected_test_type = option_menu(
             menu_title="Seed Testing Options",
             options=["Counting", "Viability Test", "Purity Test","Tetrazolium Test"],
             icons=['123', 'heart-pulse', 'filter-circle',  'droplet-half'],
-            menu_icon="seedling", # Bootstrap icon for seedling
+            menu_icon="seedling",
             default_index=0,
-            key="seed_testing_submenu" # Unique key for this menu
+            key="seed_testing_submenu"
         )
 
     if selected_test_type == "Counting":
@@ -256,9 +233,9 @@ elif selected_page == "Seed Testing":
                         temp_filepath_counting,
                         device='cpu',
                         imgsz=640,
-                        conf=conf_threshold_slider,      # Gunakan nilai dari slider
-                        iou=iou_threshold_slider,         # Gunakan nilai dari slider
-                        agnostic_nms=agnostic_nms_checkbox # Gunakan nilai dari checkbox
+                        conf=conf_threshold_slider,
+                        iou=iou_threshold_slider,
+                        agnostic_nms=agnostic_nms_checkbox
                     )
                     output_image_counting_viz = original_image_cv.copy()
                     predictions_data = []
@@ -270,31 +247,29 @@ elif selected_page == "Seed Testing":
                                               results_counting[0].masks.xy is not None and \
                                               len(results_counting[0].masks.xy) == seed_count
 
-                        for i in range(seed_count): # Loop untuk setiap deteksi benih
+                        for i in range(seed_count):
                             seed_id = i + 1; box_data = results_counting[0].boxes[i]
                             bbox_coords = box_data.xyxy[0].cpu().numpy().astype(int)
                             x1, y1, x2, y2 = bbox_coords
-                            x1_orig, y1_orig, x2_orig, y2_orig = x1, y1, x2, y2 # Simpan koordinat asli
+                            x1_orig, y1_orig, x2_orig, y2_orig = x1, y1, x2, y2
                             x1, y1 = max(0, x1), max(0, y1)
                             x2, y2 = min(original_image_cv.shape[1], x2), min(original_image_cv.shape[0], y2)
                             if x1 >= x2 or y1 >= y2:
-                                predictions_data.append({'No.': seed_id, 'Thumbnail': Image.new('RGB', (32,32), color='lightgray'), 'BBox (x1,y1,x2,y2)': f"({x1_orig},{y1_orig},{x2_orig},{y2_orig})-Invalid", 'Seg. Method': 'Error-BBox', 'Mean_R': -1.0, 'Mean_G': -1.0, 'Mean_B': -1.0, **get_default_glcm_features()}); continue
+                                predictions_data.append({'No.': seed_id, 'Thumbnail': pil_to_base64(Image.new('RGB', (32,32), color='lightgray')), 'BBox (x1,y1,x2,y2)': f"({x1_orig},{y1_orig},{x2_orig},{y2_orig})-Invalid", 'Seg. Method': 'Error-BBox', 'Mean_R': -1.0, 'Mean_G': -1.0, 'Mean_B': -1.0, **get_default_glcm_features()}); continue
                             bbox_str = f"({x1_orig},{y1_orig},{x2_orig},{y2_orig})"
                             mean_r, mean_g, mean_b = -1.0, -1.0, -1.0
                             glcm_features_dict = get_default_glcm_features(); thumbnail_pil = None
                             roi_color_original = original_image_cv[y1:y2, x1:x2]
                             if roi_color_original.size == 0:
-                                predictions_data.append({'No.': seed_id, 'Thumbnail': Image.new('RGB', (32,32), color='lightgray'), 'BBox (x1,y1,x2,y2)': bbox_str, 'Seg. Method': 'Error-ROI', 'Mean_R': mean_r, 'Mean_G': mean_g, 'Mean_B': mean_b, **glcm_features_dict}); continue
+                                predictions_data.append({'No.': seed_id, 'Thumbnail': pil_to_base64(Image.new('RGB', (32,32), color='lightgray')), 'BBox (x1,y1,x2,y2)': bbox_str, 'Seg. Method': 'Error-ROI', 'Mean_R': mean_r, 'Mean_G': mean_g, 'Mean_B': mean_b, **glcm_features_dict}); continue
                             foreground_rgb_for_extraction = None; foreground_gray_for_glcm = None
                             used_segmentation_method = "Otsu"; otsu_contours_for_viz = None
                             roi_gray_for_otsu = cv2.cvtColor(roi_color_original, cv2.COLOR_BGR2GRAY)
                             if roi_gray_for_otsu.size > 0:
                                 _, otsu_mask = cv2.threshold(roi_gray_for_otsu, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                                if otsu_mask.shape == roi_color_original.shape[:2] and (cv2.countNonZero(otsu_mask) > 0 or cv2.countNonZero(roi_gray_for_otsu) == 0) : # Cek jika mask valid atau ROI memang hitam semua
+                                if otsu_mask.shape == roi_color_original.shape[:2] and (cv2.countNonZero(otsu_mask) > 0 or cv2.countNonZero(roi_gray_for_otsu) == 0):
                                     foreground_rgb_for_extraction = cv2.bitwise_and(roi_color_original, roi_color_original, mask=otsu_mask)
                                     foreground_gray_for_glcm = cv2.bitwise_and(roi_gray_for_otsu, roi_gray_for_otsu, mask=otsu_mask)
-                                    contours, _ = cv2.findContours(otsu_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                                    otsu_contours_for_viz = [cnt + (x1, y1) for cnt in contours] # Offset contour ke posisi global di gambar
                                 else:
                                     foreground_rgb_for_extraction = roi_color_original; foreground_gray_for_glcm = cv2.cvtColor(roi_color_original, cv2.COLOR_BGR2GRAY)
                                     used_segmentation_method = "BBox (Otsu Fail)"
@@ -305,32 +280,33 @@ elif selected_page == "Seed Testing":
                                 thumbnail_pil = Image.fromarray(cv2.cvtColor(foreground_rgb_for_extraction, cv2.COLOR_BGR2RGB))
                             else:
                                 thumbnail_pil = Image.new('RGB', (32,32), color='lightgray')
-                                if foreground_rgb_for_extraction is None: foreground_rgb_for_extraction = np.zeros((1,1,3), dtype=np.uint8) # fallback
-                                if foreground_gray_for_glcm is None: foreground_gray_for_glcm = np.zeros((1,1), dtype=np.uint8) # fallback
+                                if foreground_rgb_for_extraction is None: foreground_rgb_for_extraction = np.zeros((1,1,3), dtype=np.uint8)
+                                if foreground_gray_for_glcm is None: foreground_gray_for_glcm = np.zeros((1,1), dtype=np.uint8)
+                            
+                            # --- PERBAIKAN: Konversi thumbnail PIL ke Base64 sebelum dimasukkan ke list ---
+                            thumbnail_base64 = pil_to_base64(thumbnail_pil)
 
-                            cv2.rectangle(output_image_counting_viz, (x1_orig, y1_orig), (x2_orig, y2_orig), (0, 0, 255), 2) # BBox Merah
-                            # if otsu_contours_for_viz and used_segmentation_method == "Otsu":
-                            #     cv2.drawContours(output_image_counting_viz, otsu_contours_for_viz, -1, (255, 0, 0), 1) # Contour Otsu Biru
-                            if yolo_provides_masks and i < len(results_counting[0].masks.xy): # Jika model menghasilkan mask
+                            cv2.rectangle(output_image_counting_viz, (x1_orig, y1_orig), (x2_orig, y2_orig), (0, 0, 255), 2)
+                            if yolo_provides_masks and i < len(results_counting[0].masks.xy):
                                 mask_polygon_points = results_counting[0].masks.xy[i].astype(np.int32)
-                                cv2.polylines(output_image_counting_viz, [mask_polygon_points], isClosed=True, color=(0, 255, 0), thickness=1) # Mask Hijau
+                                cv2.polylines(output_image_counting_viz, [mask_polygon_points], isClosed=True, color=(0, 255, 0), thickness=1)
 
                             if foreground_rgb_for_extraction is not None and foreground_rgb_for_extraction.size > 0:
-                                active_pixel_mask_for_rgb = None # Mask untuk mean RGB (hanya piksel foreground)
-                                if used_segmentation_method == "Otsu": # Hanya hitung mean dari piksel yang terdeteksi Otsu
+                                active_pixel_mask_for_rgb = None
+                                if used_segmentation_method == "Otsu":
                                     temp_gray_for_rgb_mask = cv2.cvtColor(foreground_rgb_for_extraction, cv2.COLOR_BGR2GRAY)
-                                    _, active_pixel_mask_for_rgb = cv2.threshold(temp_gray_for_rgb_mask, 1, 255, cv2.THRESH_BINARY) # Piksel > 0 dianggap foreground
-
-                                if active_pixel_mask_for_rgb is not None and cv2.countNonZero(active_pixel_mask_for_rgb) > 0 :
+                                    _, active_pixel_mask_for_rgb = cv2.threshold(temp_gray_for_rgb_mask, 1, 255, cv2.THRESH_BINARY)
+                                if active_pixel_mask_for_rgb is not None and cv2.countNonZero(active_pixel_mask_for_rgb) > 0:
                                     mean_bgr_values = cv2.mean(foreground_rgb_for_extraction, mask=active_pixel_mask_for_rgb)
-                                elif used_segmentation_method.startswith("BBox"): # Jika Otsu gagal, hitung mean dari seluruh BBox
-                                     mean_bgr_values = cv2.mean(foreground_rgb_for_extraction)
-                                else: mean_bgr_values = (-1.0, -1.0, -1.0, 0) # Fallback jika tidak ada data
+                                elif used_segmentation_method.startswith("BBox"):
+                                    mean_bgr_values = cv2.mean(foreground_rgb_for_extraction)
+                                else: mean_bgr_values = (-1.0, -1.0, -1.0, 0)
                                 mean_b, mean_g, mean_r = mean_bgr_values[0], mean_bgr_values[1], mean_bgr_values[2]
 
                             if foreground_gray_for_glcm is not None and foreground_gray_for_glcm.size > 0:
                                 glcm_features_dict = extract_glcm_features(foreground_gray_for_glcm)
-                            predictions_data.append({'No.': seed_id, 'Thumbnail': thumbnail_pil, 'BBox (x1,y1,x2,y2)': bbox_str, 'Seg. Method': used_segmentation_method, 'Mean_R': round(mean_r, 2), 'Mean_G': round(mean_g, 2), 'Mean_B': round(mean_b, 2), **glcm_features_dict})
+                            
+                            predictions_data.append({'No.': seed_id, 'Thumbnail': thumbnail_base64, 'BBox (x1,y1,x2,y2)': bbox_str, 'Seg. Method': used_segmentation_method, 'Mean_R': round(mean_r, 2), 'Mean_G': round(mean_g, 2), 'Mean_B': round(mean_b, 2), **glcm_features_dict})
 
                     with col2_counting_img:
                         result_image_pil_counting_viz = Image.fromarray(cv2.cvtColor(output_image_counting_viz, cv2.COLOR_BGR2RGB))
@@ -343,22 +319,23 @@ elif selected_page == "Seed Testing":
                         st.subheader("📑 Detailed Seed Analysis Table:")
                         column_config_dynamic = {
                             "No.": st.column_config.NumberColumn("ID", format="%d", width="small"),
-                            "Thumbnail": st.column_config.ImageColumn("Seed Img", width="medium"),
+                            "Thumbnail": st.column_config.ImageColumn("Seed Img", width="medium"), # Konfigurasi kolom gambar
                             "BBox (x1,y1,x2,y2)": st.column_config.TextColumn("BBox"),
                             "Seg. Method": st.column_config.TextColumn("Seg.", help="Method: Otsu, or BBox (if Otsu failed/not applicable)"),
                             "Mean_R": st.column_config.NumberColumn("R", format="%.2f"), "Mean_G": st.column_config.NumberColumn("G", format="%.2f"), "Mean_B": st.column_config.NumberColumn("B", format="%.2f")}
-
+                        
                         glcm_cols_ordered = []
                         for prop in GLCM_PROPERTIES:
                             for angle_str in GLCM_ANGLES_DEG_STR:
                                 col_name = f"{prop}_{angle_str}"
                                 glcm_cols_ordered.append(col_name)
                                 if col_name in df_prediksi.columns:
-                                    column_config_dynamic[col_name] = st.column_config.NumberColumn(f"{prop[:4]}{angle_str}°", help=f"{prop} at {angle_str}°", format="%.3f" )
+                                    column_config_dynamic[col_name] = st.column_config.NumberColumn(f"{prop[:4]}{angle_str}°", help=f"{prop} at {angle_str}°", format="%.3f")
+                        
                         desired_display_order = ['No.', 'Thumbnail', 'BBox (x1,y1,x2,y2)', 'Seg. Method', 'Mean_R', 'Mean_G', 'Mean_B'] + glcm_cols_ordered
                         display_cols = [col for col in desired_display_order if col in df_prediksi.columns]
                         st.dataframe(df_prediksi[display_cols], column_config=column_config_dynamic, use_container_width=True, hide_index=True, height=min(400, len(df_prediksi)*35 + 70))
-
+                        
                         st.markdown("---")
                         st.subheader("📊 Interactive Feature Dashboard")
 
@@ -376,13 +353,11 @@ elif selected_page == "Seed Testing":
                                         x1h, y1h = max(0, x1h), max(0, y1h)
                                         x2h = min(original_image_for_pixel_hist.shape[1], x2h)
                                         y2h = min(original_image_for_pixel_hist.shape[0], y2h)
-
                                         if x1h < x2h and y1h < y2h:
                                             roi_for_hist = original_image_for_pixel_hist[y1h:y2h, x1h:x2h]
                                             if roi_for_hist.size > 0:
                                                 gray_roi_for_hist = cv2.cvtColor(roi_for_hist, cv2.COLOR_BGR2GRAY)
                                                 _, otsu_mask_for_hist = cv2.threshold(gray_roi_for_hist, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
                                                 all_blue_pixels_hist_list.extend(roi_for_hist[:,:,0][otsu_mask_for_hist == 255])
                                                 all_green_pixels_hist_list.extend(roi_for_hist[:,:,1][otsu_mask_for_hist == 255])
                                                 all_red_pixels_hist_list.extend(roi_for_hist[:,:,2][otsu_mask_for_hist == 255])
@@ -397,24 +372,21 @@ elif selected_page == "Seed Testing":
                         rgb_glcm_cols_for_dash = ['Mean_R', 'Mean_G', 'Mean_B'] + glcm_cols_ordered
                         for col in rgb_glcm_cols_for_dash:
                             if col in df_valid_features.columns:
-                                df_valid_features[col] = df_valid_features[col].replace(-1.0, np.nan) # -1.0 adalah nilai default/error
+                                df_valid_features[col] = df_valid_features[col].replace(-1.0, np.nan)
                         df_valid_features.dropna(subset=['Mean_R', 'Mean_G', 'Mean_B'], inplace=True)
                         df_valid_features = df_valid_features[
                             (df_valid_features['Mean_R'] >= 0) & (df_valid_features['Mean_R'] <= 255) &
                             (df_valid_features['Mean_G'] >= 0) & (df_valid_features['Mean_G'] <= 255) &
                             (df_valid_features['Mean_B'] >= 0) & (df_valid_features['Mean_B'] <= 255)
                         ]
-
                         if not df_prediksi.empty:
                             st.markdown("#### Row 1: RGB Analysis")
                             col1_hist, col2_boxplot, col3_controls = st.columns([5, 4, 2])
-
                             with col3_controls:
                                 st.markdown("###### Channels")
                                 global_show_r = st.checkbox("Red", True, key="global_show_r_dash")
                                 global_show_g = st.checkbox("Green", True, key="global_show_g_dash")
                                 global_show_b = st.checkbox("Blue", True, key="global_show_b_dash")
-
                             with col1_hist:
                                 st.markdown("###### Pixel Intensity Histogram (All Seeds)")
                                 fig_pixel_hist, ax_pixel_hist = plt.subplots(figsize=(6,4))
@@ -428,7 +400,6 @@ elif selected_page == "Seed Testing":
                                 if global_show_b and all_blue_pixels_np.size > 0:
                                     ax_pixel_hist.hist(all_blue_pixels_np, bins=50, color='blue', alpha=0.6, label='Blue', density=False)
                                     plotted_pixel_hist = True
-
                                 if plotted_pixel_hist:
                                     ax_pixel_hist.set_title('Pixel Intensity Distribution', fontsize=10)
                                     ax_pixel_hist.set_xlabel('Pixel Intensity', fontsize=8)
@@ -438,7 +409,6 @@ elif selected_page == "Seed Testing":
                                 else:
                                     ax_pixel_hist.text(0.5, 0.5, "Select channel(s) or no pixel data", ha='center', va='center', fontsize=8)
                                 st.pyplot(fig_pixel_hist); plt.close(fig_pixel_hist)
-
                             with col2_boxplot:
                                 st.markdown("###### Mean RGB Value Box Plot")
                                 boxplot_data_list = []
@@ -454,6 +424,19 @@ elif selected_page == "Seed Testing":
                                     if global_show_b and 'Mean_B' in df_valid_features and not df_valid_features['Mean_B'].dropna().empty:
                                         boxplot_data_list.append(df_valid_features['Mean_B'].dropna())
                                         boxplot_labels_list.append('Blue'); boxplot_colors_list.append((0,0,1,0.5))
+                                if boxplot_data_list:
+                                    fig_boxplot_rgb, ax_boxplot_rgb = plt.subplots(figsize=(5,4))
+                                    # --- PERBAIKAN: Ganti 'labels' menjadi 'tick_labels' ---
+                                    bp = ax_boxplot_rgb.boxplot(boxplot_data_list, patch_artist=True, tick_labels=boxplot_labels_list)
+                                    for patch, color_val in zip(bp['boxes'], boxplot_colors_list): patch.set_facecolor(color_val)
+                                    ax_boxplot_rgb.set_title('Mean RGB Value Spread', fontsize=10)
+                                    ax_boxplot_rgb.set_ylabel('Mean Pixel Intensity', fontsize=8)
+                                    ax_boxplot_rgb.tick_params(axis='both', which='major', labelsize=7)
+                                    st.pyplot(fig_boxplot_rgb); plt.close(fig_boxplot_rgb)
+                                else:
+                                    st.info("Select channel(s) or no valid mean RGB data for box plot.")
+                            st.markdown("---")
+                            # ... (sisa dashboard code, tidak perlu diubah) ...
 
                                 if boxplot_data_list:
                                     fig_boxplot_rgb, ax_boxplot_rgb = plt.subplots(figsize=(5,4))
