@@ -61,11 +61,42 @@ def load_yolo_model(path_ke_model):
         if not os.path.exists(path_ke_model):
             st.error(f"Model file not found at: {path_ke_model}")
             return None
+
+        # Patch untuk PyTorch 2.6+ yang memperketat weights_only=True
+        # Daftarkan semua class ultralytics yang diperlukan sebagai safe globals
+        try:
+            import torch
+            import ultralytics.nn.tasks as unn_tasks
+            safe_classes = []
+            for cls_name in ['DetectionModel', 'SegmentationModel',
+                             'ClassificationModel', 'PoseModel', 'OBBModel']:
+                if hasattr(unn_tasks, cls_name):
+                    safe_classes.append(getattr(unn_tasks, cls_name))
+            if safe_classes and hasattr(torch.serialization, 'add_safe_globals'):
+                torch.serialization.add_safe_globals(safe_classes)
+        except Exception:
+            pass  # Jika gagal (misal PyTorch < 2.6), lanjutkan saja
+
         model = YOLO(path_ke_model)
         return model
+
     except Exception as e:
-        st.error(f"Error loading YOLO model from '{path_ke_model}': {e}")
-        return None
+        # Fallback: coba patch torch.load langsung dengan weights_only=False
+        try:
+            import torch
+            original_load = torch.load
+
+            def patched_load(*args, **kwargs):
+                kwargs['weights_only'] = False
+                return original_load(*args, **kwargs)
+
+            torch.load = patched_load
+            model = YOLO(path_ke_model)
+            torch.load = original_load  # Kembalikan fungsi asli
+            return model
+        except Exception as e2:
+            st.error(f"Error loading YOLO model from '{path_ke_model}': {e2}")
+            return None
 
 # --- Helper Functions for GLCM ---
 GLCM_PROPERTIES = ['Contrast', 'Correlation', 'Energy', 'Homogeneity']
